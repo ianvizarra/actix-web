@@ -1,6 +1,6 @@
 [package]
 name = "actix-web-actors"
-version = "1.0.2"
+version = "3.0.0"
 authors = ["Nikolay Kim <fafhrd91@gmail.com>"]
 description = "Actix actors support for actix web framework."
 readme = "README.md"
@@ -8,9 +8,7 @@ keywords = ["actix", "http", "web", "framework", "async"]
 homepage = "https://actix.rs"
 repository = "https://github.com/actix/actix-web.git"
 documentation = "https://docs.rs/actix-web-actors/"
-license = "MIT/Apache-2.0"
-exclude = [".gitignore", ".travis.yml", ".cargo/config", "appveyor.yml"]
-workspace = ".."
+license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [lib]
@@ -18,13 +16,16 @@ name = "actix_web_actors"
 path = "src/lib.rs"
 
 [dependencies]
-actix = "0.8.3"
-actix-web = "1.0.3"
-actix-http = "0.2.5"
-actix-codec = "0.1.2"
-bytes = "0.4"
-futures = "0.1.25"
+actix = "0.10.0"
+actix-web = { version = "3.0.0", default-features = false }
+actix-http = "2.0.0"
+actix-codec = "0.3.0"
+bytes = "0.5.2"
+futures-channel = { version = "0.3.5", default-features = false }
+futures-core = { version = "0.3.5", default-features = false }
+pin-project = "1.0.0"
 
 [dev-dependencies]
-env_logger = "0.6"
-actix-http-test = { version = "0.2.4", features=["ssl"] }
+actix-rt = "1.1.1"
+env_logger = "0.7"
+futures-util = { version = "0.3.5", default-features = false }

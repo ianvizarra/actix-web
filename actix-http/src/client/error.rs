@@ -1,14 +1,13 @@
 use std::io;
 
+use actix_connect::resolver::ResolveError;
 use derive_more::{Display, From};
-use trust_dns_resolver::error::ResolveError;
 
-#[cfg(feature = "ssl")]
-use openssl::ssl::{Error as SslError, HandshakeError};
+#[cfg(feature = "openssl")]
+use actix_connect::ssl::openssl::{HandshakeError, SslError};
 
 use crate::error::{Error, ParseError, ResponseError};
-use crate::http::Error as HttpError;
-use crate::response::Response;
+use crate::http::{Error as HttpError, StatusCode};
 
 /// A set of errors that can occur while connecting to an HTTP host
 #[derive(Debug, Display, From)]
@@ -18,9 +17,14 @@ pub enum ConnectError {
     SslIsNotSupported,
 
     /// SSL error
-    #[cfg(feature = "ssl")]
+    #[cfg(feature = "openssl")]
     #[display(fmt = "{}", _0)]
     SslError(SslError),
+
+    /// SSL Handshake error
+    #[cfg(feature = "openssl")]
+    #[display(fmt = "{}", _0)]
+    SslHandshakeError(String),
 
     /// Failed to resolve the hostname
     #[display(fmt = "Failed resolving hostname: {}", _0)]
@@ -35,7 +39,7 @@ pub enum ConnectError {
     H2(h2::Error),
 
     /// Connecting took too long
-    #[display(fmt = "Timeout out while establishing connection")]
+    #[display(fmt = "Timeout while establishing connection")]
     Timeout,
 
     /// Connector has been disconnected
@@ -44,12 +48,14 @@ pub enum ConnectError {
 
     /// Unresolved host name
     #[display(fmt = "Connector received `Connect` method with unresolved host")]
-    Unresolverd,
+    Unresolved,
 
     /// Connection io error
     #[display(fmt = "{}", _0)]
     Io(io::Error),
 }
+
+impl std::error::Error for ConnectError {}
 
 impl From<actix_connect::ConnectError> for ConnectError {
     fn from(err: actix_connect::ConnectError) -> ConnectError {
@@ -57,20 +63,16 @@ impl From<actix_connect::ConnectError> for ConnectError {
             actix_connect::ConnectError::Resolver(e) => ConnectError::Resolver(e),
             actix_connect::ConnectError::NoRecords => ConnectError::NoRecords,
             actix_connect::ConnectError::InvalidInput => panic!(),
-            actix_connect::ConnectError::Unresolverd => ConnectError::Unresolverd,
+            actix_connect::ConnectError::Unresolved => ConnectError::Unresolved,
             actix_connect::ConnectError::Io(e) => ConnectError::Io(e),
         }
     }
 }
 
-#[cfg(feature = "ssl")]
-impl<T> From<HandshakeError<T>> for ConnectError {
+#[cfg(feature = "openssl")]
+impl<T: std::fmt::Debug> From<HandshakeError<T>> for ConnectError {
     fn from(err: HandshakeError<T>) -> ConnectError {
-        match err {
-            HandshakeError::SetupFailure(stack) => SslError::from(stack).into(),
-            HandshakeError::Failure(stream) => stream.into_error().into(),
-            HandshakeError::WouldBlock(stream) => stream.into_error().into(),
-        }
+        ConnectError::SslHandshakeError(format!("{:?}", err))
     }
 }
 
@@ -85,6 +87,8 @@ pub enum InvalidUrl {
     #[display(fmt = "Url parse error: {}", _0)]
     HttpError(http::Error),
 }
+
+impl std::error::Error for InvalidUrl {}
 
 /// A set of errors that can occur during request sending and response reading
 #[derive(Debug, Display, From)]
@@ -106,7 +110,7 @@ pub enum SendRequestError {
     #[display(fmt = "{}", _0)]
     H2(h2::Error),
     /// Response took too long
-    #[display(fmt = "Timeout out while waiting for response")]
+    #[display(fmt = "Timeout while waiting for response")]
     Timeout,
     /// Tunnels are not supported for http2 connection
     #[display(fmt = "Tunnels are not supported for http2 connection")]
@@ -115,17 +119,18 @@ pub enum SendRequestError {
     Body(Error),
 }
 
+impl std::error::Error for SendRequestError {}
+
 /// Convert `SendRequestError` to a server `Response`
 impl ResponseError for SendRequestError {
-    fn error_response(&self) -> Response {
+    fn status_code(&self) -> StatusCode {
         match *self {
             SendRequestError::Connect(ConnectError::Timeout) => {
-                Response::GatewayTimeout()
+                StatusCode::GATEWAY_TIMEOUT
             }
-            SendRequestError::Connect(_) => Response::BadGateway(),
-            _ => Response::InternalServerError(),
+            SendRequestError::Connect(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
-        .into()
     }
 }
 
@@ -139,6 +144,8 @@ pub enum FreezeRequestError {
     #[display(fmt = "{}", _0)]
     Http(HttpError),
 }
+
+impl std::error::Error for FreezeRequestError {}
 
 impl From<FreezeRequestError> for SendRequestError {
     fn from(e: FreezeRequestError) -> Self {

@@ -6,7 +6,7 @@
 //! It is possible to add guards to *scopes*, *resources*
 //! and *routes*. Actix provide several guards by default, like various
 //! http methods, header, etc. To become a guard, type must implement `Guard`
-//! trait. Simple functions coulds guards as well.
+//! trait. Simple functions could be guards as well.
 //!
 //! Guards can not modify the request object. But it is possible
 //! to store extra attributes on a request by using the `Extensions` container.
@@ -24,9 +24,10 @@
 //!     );
 //! }
 //! ```
-
 #![allow(non_snake_case)]
-use actix_http::http::{self, header, uri::Uri, HttpTryFrom};
+use std::convert::TryFrom;
+
+use actix_http::http::{self, header, uri::Uri};
 use actix_http::RequestHead;
 
 /// Trait defines resource guards. Guards are used for route selection.
@@ -99,7 +100,7 @@ pub fn Any<F: Guard + 'static>(guard: F) -> AnyGuard {
     AnyGuard(vec![Box::new(guard)])
 }
 
-/// Matches if any of supplied guards matche.
+/// Matches any of supplied guards.
 pub struct AnyGuard(Vec<Box<dyn Guard>>);
 
 impl AnyGuard {
@@ -258,16 +259,15 @@ impl Guard for HeaderGuard {
 
 /// Return predicate that matches if request contains specified Host name.
 ///
-/// ```rust,ignore
-/// # extern crate actix_web;
-/// use actix_web::{guard::Host, App, HttpResponse};
+/// ```rust
+/// use actix_web::{web, guard::Host, App, HttpResponse};
 ///
 /// fn main() {
-///     App::new().resource("/index.html", |r| {
-///         r.route()
+///     App::new().service(
+///         web::resource("/index.html")
 ///             .guard(Host("www.rust-lang.org"))
-///             .f(|_| HttpResponse::MethodNotAllowed())
-///     });
+///             .to(|| HttpResponse::MethodNotAllowed())
+///     );
 /// }
 /// ```
 pub fn Host<H: AsRef<str>>(host: H) -> HostGuard {
@@ -276,7 +276,8 @@ pub fn Host<H: AsRef<str>>(host: H) -> HostGuard {
 
 fn get_host_uri(req: &RequestHead) -> Option<Uri> {
     use core::str::FromStr;
-    req.headers.get(header::HOST)
+    req.headers
+        .get(header::HOST)
         .and_then(|host_value| host_value.to_str().ok())
         .or_else(|| req.uri.host())
         .map(|host: &str| Uri::from_str(host).ok())

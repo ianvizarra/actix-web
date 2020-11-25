@@ -1,32 +1,50 @@
-# Actix http [![Build Status](https://travis-ci.org/actix/actix-web.svg?branch=master)](https://travis-ci.org/actix/actix-web)  [![codecov](https://codecov.io/gh/actix/actix-web/branch/master/graph/badge.svg)](https://codecov.io/gh/actix/actix-web) [![crates.io](https://meritbadge.herokuapp.com/actix-http)](https://crates.io/crates/actix-http) [![Join the chat at https://gitter.im/actix/actix](https://badges.gitter.im/actix/actix.svg)](https://gitter.im/actix/actix?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+# actix-http
 
-Actix http
+> HTTP primitives for the Actix ecosystem.
 
-## Documentation & community resources
+[![crates.io](https://img.shields.io/crates/v/actix-http?label=latest)](https://crates.io/crates/actix-http)
+[![Documentation](https://docs.rs/actix-http/badge.svg?version=2.2.0)](https://docs.rs/actix-http/2.2.0)
+![Apache 2.0 or MIT licensed](https://img.shields.io/crates/l/actix-http)
+[![Dependency Status](https://deps.rs/crate/actix-http/2.2.0/status.svg)](https://deps.rs/crate/actix-http/2.2.0)
+[![Join the chat at https://gitter.im/actix/actix-web](https://badges.gitter.im/actix/actix-web.svg)](https://gitter.im/actix/actix-web?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-* [User Guide](https://actix.rs/docs/)
-* [API Documentation](https://docs.rs/actix-http/)
-* [Chat on gitter](https://gitter.im/actix/actix)
-* Cargo package: [actix-http](https://crates.io/crates/actix-http)
-* Minimum supported Rust version: 1.31 or later
+## Documentation & Resources
+
+- [API Documentation](https://docs.rs/actix-http)
+- [Chat on Gitter](https://gitter.im/actix/actix-web)
+- Minimum Supported Rust Version (MSRV): 1.42.0
 
 ## Example
 
 ```rust
-// see examples/framed_hello.rs for complete list of used crates.
-extern crate actix_http;
-use actix_http::{h1, Response, ServiceConfig};
+use std::{env, io};
 
-fn main() {
-    Server::new().bind("framed_hello", "127.0.0.1:8080", || {
-        IntoFramed::new(|| h1::Codec::new(ServiceConfig::default()))	// <- create h1 codec
-            .and_then(TakeItem::new().map_err(|_| ()))	                // <- read one request
-            .and_then(|(_req, _framed): (_, Framed<_, _>)| {	        // <- send response and close conn
-                SendResponse::send(_framed, Response::Ok().body("Hello world!"))
-                    .map_err(|_| ())
-                    .map(|_| ())
-            })
-    }).unwrap().run();
+use actix_http::{HttpService, Response};
+use actix_server::Server;
+use futures_util::future;
+use http::header::HeaderValue;
+use log::info;
+
+#[actix_rt::main]
+async fn main() -> io::Result<()> {
+    env::set_var("RUST_LOG", "hello_world=info");
+    env_logger::init();
+
+    Server::build()
+        .bind("hello-world", "127.0.0.1:8080", || {
+            HttpService::build()
+                .client_timeout(1000)
+                .client_disconnect(1000)
+                .finish(|_req| {
+                    info!("{:?}", _req);
+                    let mut res = Response::Ok();
+                    res.header("x-head", HeaderValue::from_static("dummy value!"));
+                    future::ok::<_, ()>(res.body("Hello world!"))
+                })
+                .tcp()
+        })?
+        .run()
+        .await
 }
 ```
 

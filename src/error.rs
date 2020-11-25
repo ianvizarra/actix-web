@@ -1,4 +1,5 @@
 //! Error and Result module
+
 pub use actix_http::error::*;
 use derive_more::{Display, From};
 use serde_json::error::Error as JsonError;
@@ -6,7 +7,6 @@ use url::ParseError as UrlParseError;
 
 use crate::http::StatusCode;
 use crate::HttpResponse;
-use serde_urlencoded::de;
 
 /// Errors which can occur when attempting to generate resource uri.
 #[derive(Debug, PartialEq, Display, From)]
@@ -21,6 +21,8 @@ pub enum UrlGenerationError {
     #[display(fmt = "{}", _0)]
     ParseError(UrlParseError),
 }
+
+impl std::error::Error for UrlGenerationError {}
 
 /// `InternalServerError` for `UrlGeneratorError`
 impl ResponseError for UrlGenerationError {}
@@ -52,17 +54,15 @@ pub enum UrlencodedError {
     Payload(PayloadError),
 }
 
+impl std::error::Error for UrlencodedError {}
+
 /// Return `BadRequest` for `UrlencodedError`
 impl ResponseError for UrlencodedError {
-    fn error_response(&self) -> HttpResponse {
+    fn status_code(&self) -> StatusCode {
         match *self {
-            UrlencodedError::Overflow { .. } => {
-                HttpResponse::new(StatusCode::PAYLOAD_TOO_LARGE)
-            }
-            UrlencodedError::UnknownLength => {
-                HttpResponse::new(StatusCode::LENGTH_REQUIRED)
-            }
-            _ => HttpResponse::new(StatusCode::BAD_REQUEST),
+            UrlencodedError::Overflow { .. } => StatusCode::PAYLOAD_TOO_LARGE,
+            UrlencodedError::UnknownLength => StatusCode::LENGTH_REQUIRED,
+            _ => StatusCode::BAD_REQUEST,
         }
     }
 }
@@ -84,6 +84,8 @@ pub enum JsonPayloadError {
     Payload(PayloadError),
 }
 
+impl std::error::Error for JsonPayloadError {}
+
 /// Return `BadRequest` for `JsonPayloadError`
 impl ResponseError for JsonPayloadError {
     fn error_response(&self) -> HttpResponse {
@@ -101,15 +103,15 @@ impl ResponseError for JsonPayloadError {
 pub enum PathError {
     /// Deserialize error
     #[display(fmt = "Path deserialize error: {}", _0)]
-    Deserialize(de::Error),
+    Deserialize(serde::de::value::Error),
 }
+
+impl std::error::Error for PathError {}
 
 /// Return `BadRequest` for `PathError`
 impl ResponseError for PathError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            PathError::Deserialize(_) => HttpResponse::new(StatusCode::BAD_REQUEST),
-        }
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
     }
 }
 
@@ -118,17 +120,15 @@ impl ResponseError for PathError {
 pub enum QueryPayloadError {
     /// Deserialize error
     #[display(fmt = "Query deserialize error: {}", _0)]
-    Deserialize(de::Error),
+    Deserialize(serde::de::value::Error),
 }
+
+impl std::error::Error for QueryPayloadError {}
 
 /// Return `BadRequest` for `QueryPayloadError`
 impl ResponseError for QueryPayloadError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            QueryPayloadError::Deserialize(_) => {
-                HttpResponse::new(StatusCode::BAD_REQUEST)
-            }
-        }
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
     }
 }
 
@@ -150,14 +150,14 @@ pub enum ReadlinesError {
     ContentTypeError(ContentTypeError),
 }
 
+impl std::error::Error for ReadlinesError {}
+
 /// Return `BadRequest` for `ReadlinesError`
 impl ResponseError for ReadlinesError {
-    fn error_response(&self) -> HttpResponse {
+    fn status_code(&self) -> StatusCode {
         match *self {
-            ReadlinesError::LimitOverflow => {
-                HttpResponse::new(StatusCode::PAYLOAD_TOO_LARGE)
-            }
-            _ => HttpResponse::new(StatusCode::BAD_REQUEST),
+            ReadlinesError::LimitOverflow => StatusCode::PAYLOAD_TOO_LARGE,
+            _ => StatusCode::BAD_REQUEST,
         }
     }
 }

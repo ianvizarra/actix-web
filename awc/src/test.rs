@@ -1,12 +1,11 @@
 //! Test helpers for actix http client to use during testing.
-use std::fmt::Write as FmtWrite;
+use std::convert::TryFrom;
 
-use actix_http::cookie::{Cookie, CookieJar, USERINFO};
+use actix_http::cookie::{Cookie, CookieJar};
 use actix_http::http::header::{self, Header, HeaderValue, IntoHeaderValue};
-use actix_http::http::{HeaderName, HttpTryFrom, StatusCode, Version};
+use actix_http::http::{Error as HttpError, HeaderName, StatusCode, Version};
 use actix_http::{h1, Payload, ResponseHead};
 use bytes::Bytes;
-use percent_encoding::percent_encode;
 
 use crate::ClientResponse;
 
@@ -31,7 +30,8 @@ impl TestResponse {
     /// Create TestResponse and set header
     pub fn with_header<K, V>(key: K, value: V) -> Self
     where
-        HeaderName: HttpTryFrom<K>,
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<HttpError>,
         V: IntoHeaderValue,
     {
         Self::default().header(key, value)
@@ -55,7 +55,8 @@ impl TestResponse {
     /// Append a header
     pub fn header<K, V>(mut self, key: K, value: V) -> Self
     where
-        HeaderName: HttpTryFrom<K>,
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<HttpError>,
         V: IntoHeaderValue,
     {
         if let Ok(key) = HeaderName::try_from(key) {
@@ -85,16 +86,10 @@ impl TestResponse {
     pub fn finish(self) -> ClientResponse {
         let mut head = self.head;
 
-        let mut cookie = String::new();
-        for c in self.cookies.delta() {
-            let name = percent_encode(c.name().as_bytes(), USERINFO);
-            let value = percent_encode(c.value().as_bytes(), USERINFO);
-            let _ = write!(&mut cookie, "; {}={}", name, value);
-        }
-        if !cookie.is_empty() {
+        for cookie in self.cookies.delta() {
             head.headers.insert(
                 header::SET_COOKIE,
-                HeaderValue::from_str(&cookie.as_str()[2..]).unwrap(),
+                HeaderValue::from_str(&cookie.encoded().to_string()).unwrap(),
             );
         }
 

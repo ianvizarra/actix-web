@@ -1,6 +1,7 @@
 //! Various http headers
 // This is mostly copy of [hyper](https://github.com/hyperium/hyper/tree/master/src/header)
 
+use std::convert::TryFrom;
 use std::{fmt, str::FromStr};
 
 use bytes::{Bytes, BytesMut};
@@ -73,58 +74,58 @@ impl<'a> IntoHeaderValue for &'a [u8] {
 }
 
 impl IntoHeaderValue for Bytes {
-    type Error = InvalidHeaderValueBytes;
+    type Error = InvalidHeaderValue;
 
     #[inline]
     fn try_into(self) -> Result<HeaderValue, Self::Error> {
-        HeaderValue::from_shared(self)
+        HeaderValue::from_maybe_shared(self)
     }
 }
 
 impl IntoHeaderValue for Vec<u8> {
-    type Error = InvalidHeaderValueBytes;
+    type Error = InvalidHeaderValue;
 
     #[inline]
     fn try_into(self) -> Result<HeaderValue, Self::Error> {
-        HeaderValue::from_shared(Bytes::from(self))
+        HeaderValue::try_from(self)
     }
 }
 
 impl IntoHeaderValue for String {
-    type Error = InvalidHeaderValueBytes;
+    type Error = InvalidHeaderValue;
 
     #[inline]
     fn try_into(self) -> Result<HeaderValue, Self::Error> {
-        HeaderValue::from_shared(Bytes::from(self))
+        HeaderValue::try_from(self)
     }
 }
 
 impl IntoHeaderValue for usize {
-    type Error = InvalidHeaderValueBytes;
+    type Error = InvalidHeaderValue;
 
     #[inline]
     fn try_into(self) -> Result<HeaderValue, Self::Error> {
         let s = format!("{}", self);
-        HeaderValue::from_shared(Bytes::from(s))
+        HeaderValue::try_from(s)
     }
 }
 
 impl IntoHeaderValue for u64 {
-    type Error = InvalidHeaderValueBytes;
+    type Error = InvalidHeaderValue;
 
     #[inline]
     fn try_into(self) -> Result<HeaderValue, Self::Error> {
         let s = format!("{}", self);
-        HeaderValue::from_shared(Bytes::from(s))
+        HeaderValue::try_from(s)
     }
 }
 
 impl IntoHeaderValue for Mime {
-    type Error = InvalidHeaderValueBytes;
+    type Error = InvalidHeaderValue;
 
     #[inline]
     fn try_into(self) -> Result<HeaderValue, Self::Error> {
-        HeaderValue::from_shared(Bytes::from(format!("{}", self)))
+        HeaderValue::try_from(format!("{}", self))
     }
 }
 
@@ -147,10 +148,7 @@ impl ContentEncoding {
     #[inline]
     /// Is the content compressed?
     pub fn is_compression(self) -> bool {
-        match self {
-            ContentEncoding::Identity | ContentEncoding::Auto => false,
-            _ => true,
-        }
+        matches!(self, ContentEncoding::Identity | ContentEncoding::Auto)
     }
 
     #[inline]
@@ -204,7 +202,7 @@ impl Writer {
         }
     }
     fn take(&mut self) -> Bytes {
-        self.buf.take().freeze()
+        self.buf.split().freeze()
     }
 }
 
@@ -216,7 +214,7 @@ impl fmt::Write for Writer {
     }
 
     #[inline]
-    fn write_fmt(&mut self, args: fmt::Arguments) -> fmt::Result {
+    fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
         fmt::write(self, args)
     }
 }
@@ -258,7 +256,7 @@ pub fn from_one_raw_str<T: FromStr>(val: Option<&HeaderValue>) -> Result<T, Pars
 #[inline]
 #[doc(hidden)]
 /// Format an array into a comma-delimited string.
-pub fn fmt_comma_delimited<T>(f: &mut fmt::Formatter, parts: &[T]) -> fmt::Result
+pub fn fmt_comma_delimited<T>(f: &mut fmt::Formatter<'_>, parts: &[T]) -> fmt::Result
 where
     T: fmt::Display,
 {
@@ -360,7 +358,7 @@ pub fn parse_extended_value(
 }
 
 impl fmt::Display for ExtendedValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let encoded_value =
             percent_encoding::percent_encode(&self.value[..], HTTP_VALUE);
         if let Some(ref lang) = self.language_tag {
@@ -372,10 +370,8 @@ impl fmt::Display for ExtendedValue {
 }
 
 /// Percent encode a sequence of bytes with a character set defined in
-/// [https://tools.ietf.org/html/rfc5987#section-3.2][url]
-///
-/// [url]: https://tools.ietf.org/html/rfc5987#section-3.2
-pub fn http_percent_encode(f: &mut fmt::Formatter, bytes: &[u8]) -> fmt::Result {
+/// <https://tools.ietf.org/html/rfc5987#section-3.2>
+pub fn http_percent_encode(f: &mut fmt::Formatter<'_>, bytes: &[u8]) -> fmt::Result {
     let encoded = percent_encoding::percent_encode(bytes, HTTP_VALUE);
     fmt::Display::fmt(&encoded, f)
 }

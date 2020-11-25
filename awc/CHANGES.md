@@ -1,5 +1,87 @@
 # Changes
 
+## Unreleased - 2020-xx-xx
+
+
+## 2.0.2 - 2020-11-25
+### Changed
+* Upgrade `serde_urlencoded` to `0.7`. [#1773]
+
+[#1773]: https://github.com/actix/actix-web/pull/1773
+
+
+## 2.0.1 - 2020-10-30
+### Changed
+* Upgrade `base64` to `0.13`. [#1744]
+* Deprecate `ClientRequest::{if_some, if_true}`. [#1760]
+
+### Fixed
+* Use `Accept-Encoding: identity` instead of `Accept-Encoding: br` when no compression feature
+  is enabled [#1737]
+
+[#1737]: https://github.com/actix/actix-web/pull/1737
+[#1760]: https://github.com/actix/actix-web/pull/1760
+[#1744]: https://github.com/actix/actix-web/pull/1744
+
+
+## 2.0.0 - 2020-09-11
+### Changed
+* `Client::build` was renamed to `Client::builder`.
+
+
+## 2.0.0-beta.4 - 2020-09-09
+### Changed
+* Update actix-codec & actix-tls dependencies.
+
+
+## 2.0.0-beta.3 - 2020-08-17
+### Changed
+* Update `rustls` to 0.18
+
+
+## 2.0.0-beta.2 - 2020-07-21
+### Changed
+* Update `actix-http` dependency to 2.0.0-beta.2
+
+
+## [2.0.0-beta.1] - 2020-07-14
+### Changed
+* Update `actix-http` dependency to 2.0.0-beta.1
+
+## [2.0.0-alpha.2] - 2020-05-21
+
+### Changed
+
+* Implement `std::error::Error` for our custom errors [#1422]
+* Bump minimum supported Rust version to 1.40
+* Update `base64` dependency to 0.12
+
+[#1422]: https://github.com/actix/actix-web/pull/1422
+
+## [2.0.0-alpha.1] - 2020-03-11
+
+* Update `actix-http` dependency to 2.0.0-alpha.2
+* Update `rustls` dependency to 0.17
+* ClientBuilder accepts initial_window_size and initial_connection_window_size HTTP2 configuration
+* ClientBuilder allowing to set max_http_version to limit HTTP version to be used
+
+## [1.0.1] - 2019-12-15
+
+* Fix compilation with default features off
+
+## [1.0.0] - 2019-12-13
+
+* Release
+
+## [1.0.0-alpha.3]
+
+* Migrate to `std::future`
+
+
+## [0.2.8] - 2019-11-06
+
+* Add support for setting query from Serialize type for client request.
+
 
 ## [0.2.7] - 2019-09-25
 

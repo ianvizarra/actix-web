@@ -5,6 +5,7 @@ use derive_more::Display;
 #[derive(Display, Debug, PartialEq)]
 pub enum FilesError {
     /// Path is not a directory
+    #[allow(dead_code)]
     #[display(fmt = "Path is not a directory. Unable to serve static files")]
     IsNotDirectory,
 
@@ -35,7 +36,7 @@ pub enum UriSegmentError {
 
 /// Return `BadRequest` for `UriSegmentError`
 impl ResponseError for UriSegmentError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::new(StatusCode::BAD_REQUEST)
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
     }
 }

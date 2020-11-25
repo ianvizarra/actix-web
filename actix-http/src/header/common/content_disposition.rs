@@ -76,6 +76,11 @@ pub enum DispositionParam {
     /// the form.
     Name(String),
     /// A plain file name.
+    ///
+    /// It is [not supposed](https://tools.ietf.org/html/rfc6266#appendix-D) to contain any
+    /// non-ASCII characters when used in a *Content-Disposition* HTTP response header, where
+    /// [`FilenameExt`](DispositionParam::FilenameExt) with charset UTF-8 may be used instead
+    /// in case there are Unicode characters in file names.
     Filename(String),
     /// An extended file name. It must not exist for `ContentType::Formdata` according to
     /// [RFC7578 Section 4.2](https://tools.ietf.org/html/rfc7578#section-4.2).
@@ -85,40 +90,40 @@ pub enum DispositionParam {
     /// [RFC6266](https://tools.ietf.org/html/rfc6266) as *token "=" value*. Recipients should
     /// ignore unrecognizable parameters.
     Unknown(String, String),
-    /// An unrecognized extended paramater as defined in
+    /// An unrecognized extended parameter as defined in
     /// [RFC5987](https://tools.ietf.org/html/rfc5987) as *ext-parameter*, in
     /// [RFC6266](https://tools.ietf.org/html/rfc6266) as *ext-token "=" ext-value*. The single
-    /// trailling asterisk is not included. Recipients should ignore unrecognizable parameters.
+    /// trailing asterisk is not included. Recipients should ignore unrecognizable parameters.
     UnknownExt(String, ExtendedValue),
 }
 
 impl DispositionParam {
-    /// Returns `true` if the paramater is [`Name`](DispositionParam::Name).
+    /// Returns `true` if the parameter is [`Name`](DispositionParam::Name).
     #[inline]
     pub fn is_name(&self) -> bool {
         self.as_name().is_some()
     }
 
-    /// Returns `true` if the paramater is [`Filename`](DispositionParam::Filename).
+    /// Returns `true` if the parameter is [`Filename`](DispositionParam::Filename).
     #[inline]
     pub fn is_filename(&self) -> bool {
         self.as_filename().is_some()
     }
 
-    /// Returns `true` if the paramater is [`FilenameExt`](DispositionParam::FilenameExt).
+    /// Returns `true` if the parameter is [`FilenameExt`](DispositionParam::FilenameExt).
     #[inline]
     pub fn is_filename_ext(&self) -> bool {
         self.as_filename_ext().is_some()
     }
 
-    /// Returns `true` if the paramater is [`Unknown`](DispositionParam::Unknown) and the `name`
+    /// Returns `true` if the parameter is [`Unknown`](DispositionParam::Unknown) and the `name`
     #[inline]
     /// matches.
     pub fn is_unknown<T: AsRef<str>>(&self, name: T) -> bool {
         self.as_unknown(name).is_some()
     }
 
-    /// Returns `true` if the paramater is [`UnknownExt`](DispositionParam::UnknownExt) and the
+    /// Returns `true` if the parameter is [`UnknownExt`](DispositionParam::UnknownExt) and the
     /// `name` matches.
     #[inline]
     pub fn is_unknown_ext<T: AsRef<str>>(&self, name: T) -> bool {
@@ -220,7 +225,16 @@ impl DispositionParam {
 /// ext-token           = <the characters in token, followed by "*">
 /// ```
 ///
-/// **Note**: filename* [must not](https://tools.ietf.org/html/rfc7578#section-4.2) be used within
+/// # Note
+///
+/// filename is [not supposed](https://tools.ietf.org/html/rfc6266#appendix-D) to contain any
+/// non-ASCII characters when used in a *Content-Disposition* HTTP response header, where
+/// filename* with charset UTF-8 may be used instead in case there are Unicode characters in file
+/// names.
+/// filename is [acceptable](https://tools.ietf.org/html/rfc7578#section-4.2) to be UTF-8 encoded
+/// directly in a *Content-Disposition* header for *multipart/form-data*, though.
+///
+/// filename* [must not](https://tools.ietf.org/html/rfc7578#section-4.2) be used within
 /// *multipart/form-data*.
 ///
 /// # Example
@@ -251,13 +265,29 @@ impl DispositionParam {
 /// };
 /// assert_eq!(cd2.get_name(), Some("file")); // field name
 /// assert_eq!(cd2.get_filename(), Some("bill.odt"));
+///
+/// // HTTP response header with Unicode characters in file names
+/// let cd3 = ContentDisposition {
+///     disposition: DispositionType::Attachment,
+///     parameters: vec![
+///         DispositionParam::FilenameExt(ExtendedValue {
+///             charset: Charset::Ext(String::from("UTF-8")),
+///             language_tag: None,
+///             value: String::from("\u{1f600}.svg").into_bytes(),
+///         }),
+///         // fallback for better compatibility
+///         DispositionParam::Filename(String::from("Grinning-Face-Emoji.svg"))
+///     ],
+/// };
+/// assert_eq!(cd3.get_filename_ext().map(|ev| ev.value.as_ref()),
+///            Some("\u{1f600}.svg".as_bytes()));
 /// ```
 ///
-/// # WARN
+/// # Security Note
+///
 /// If "filename" parameter is supplied, do not use the file name blindly, check and possibly
 /// change to match local file system conventions if applicable, and do not use directory path
-/// information that may be present. See [RFC2183](https://tools.ietf.org/html/rfc2183#section-2.3)
-/// .
+/// information that may be present. See [RFC2183](https://tools.ietf.org/html/rfc2183#section-2.3).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContentDisposition {
     /// The disposition type
@@ -333,15 +363,17 @@ impl ContentDisposition {
                     // token: won't contains semicolon according to RFC 2616 Section 2.2
                     let (token, new_left) = split_once_and_trim(left, ';');
                     left = new_left;
+                    if token.is_empty() {
+                        // quoted-string can be empty, but token cannot be empty
+                        return Err(crate::error::ParseError::Header);
+                    }
                     token.to_owned()
                 };
-                if value.is_empty() {
-                    return Err(crate::error::ParseError::Header);
-                }
 
                 let param = if param_name.eq_ignore_ascii_case("name") {
                     DispositionParam::Name(value)
                 } else if param_name.eq_ignore_ascii_case("filename") {
+                    // See also comments in test_from_raw_unnecessary_percent_decode.
                     DispositionParam::Filename(value)
                 } else {
                     DispositionParam::Unknown(param_name.to_owned(), value)
@@ -355,26 +387,17 @@ impl ContentDisposition {
 
     /// Returns `true` if it is [`Inline`](DispositionType::Inline).
     pub fn is_inline(&self) -> bool {
-        match self.disposition {
-            DispositionType::Inline => true,
-            _ => false,
-        }
+        matches!(self.disposition, DispositionType::Inline)
     }
 
     /// Returns `true` if it is [`Attachment`](DispositionType::Attachment).
     pub fn is_attachment(&self) -> bool {
-        match self.disposition {
-            DispositionType::Attachment => true,
-            _ => false,
-        }
+        matches!(self.disposition, DispositionType::Attachment)
     }
 
     /// Returns `true` if it is [`FormData`](DispositionType::FormData).
     pub fn is_form_data(&self) -> bool {
-        match self.disposition {
-            DispositionType::FormData => true,
-            _ => false,
-        }
+        matches!(self.disposition, DispositionType::FormData)
     }
 
     /// Returns `true` if it is [`Ext`](DispositionType::Ext) and the `disp_type` matches.
@@ -391,7 +414,7 @@ impl ContentDisposition {
 
     /// Return the value of *name* if exists.
     pub fn get_name(&self) -> Option<&str> {
-        self.parameters.iter().filter_map(|p| p.as_name()).nth(0)
+        self.parameters.iter().filter_map(|p| p.as_name()).next()
     }
 
     /// Return the value of *filename* if exists.
@@ -399,7 +422,7 @@ impl ContentDisposition {
         self.parameters
             .iter()
             .filter_map(|p| p.as_filename())
-            .nth(0)
+            .next()
     }
 
     /// Return the value of *filename\** if exists.
@@ -407,7 +430,7 @@ impl ContentDisposition {
         self.parameters
             .iter()
             .filter_map(|p| p.as_filename_ext())
-            .nth(0)
+            .next()
     }
 
     /// Return the value of the parameter which the `name` matches.
@@ -416,7 +439,7 @@ impl ContentDisposition {
         self.parameters
             .iter()
             .filter_map(|p| p.as_unknown(name))
-            .nth(0)
+            .next()
     }
 
     /// Return the value of the extended parameter which the `name` matches.
@@ -425,17 +448,17 @@ impl ContentDisposition {
         self.parameters
             .iter()
             .filter_map(|p| p.as_unknown_ext(name))
-            .nth(0)
+            .next()
     }
 }
 
 impl IntoHeaderValue for ContentDisposition {
-    type Error = header::InvalidHeaderValueBytes;
+    type Error = header::InvalidHeaderValue;
 
     fn try_into(self) -> Result<header::HeaderValue, Self::Error> {
         let mut writer = Writer::new();
         let _ = write!(&mut writer, "{}", self);
-        header::HeaderValue::from_shared(writer.take())
+        header::HeaderValue::from_maybe_shared(writer.take())
     }
 }
 
@@ -454,7 +477,7 @@ impl Header for ContentDisposition {
 }
 
 impl fmt::Display for DispositionType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DispositionType::Inline => write!(f, "inline"),
             DispositionType::Attachment => write!(f, "attachment"),
@@ -465,12 +488,41 @@ impl fmt::Display for DispositionType {
 }
 
 impl fmt::Display for DispositionParam {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // All ASCII control charaters (0-30, 127) excepting horizontal tab, double quote, and
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // All ASCII control characters (0-30, 127) including horizontal tab, double quote, and
         // backslash should be escaped in quoted-string (i.e. "foobar").
-        // Ref: RFC6266 S4.1 -> RFC2616 S2.2; RFC 7578 S4.2 -> RFC2183 S2 -> ... .
+        // Ref: RFC6266 S4.1 -> RFC2616 S3.6
+        // filename-parm  = "filename" "=" value
+        // value          = token | quoted-string
+        // quoted-string  = ( <"> *(qdtext | quoted-pair ) <"> )
+        // qdtext         = <any TEXT except <">>
+        // quoted-pair    = "\" CHAR
+        // TEXT           = <any OCTET except CTLs,
+        //                  but including LWS>
+        // LWS            = [CRLF] 1*( SP | HT )
+        // OCTET          = <any 8-bit sequence of data>
+        // CHAR           = <any US-ASCII character (octets 0 - 127)>
+        // CTL            = <any US-ASCII control character
+        //                  (octets 0 - 31) and DEL (127)>
+        //
+        // Ref: RFC7578 S4.2 -> RFC2183 S2 -> RFC2045 S5.1
+        // parameter := attribute "=" value
+        // attribute := token
+        //              ; Matching of attributes
+        //              ; is ALWAYS case-insensitive.
+        // value := token / quoted-string
+        // token := 1*<any (US-ASCII) CHAR except SPACE, CTLs,
+        //             or tspecials>
+        // tspecials :=  "(" / ")" / "<" / ">" / "@" /
+        //               "," / ";" / ":" / "\" / <">
+        //               "/" / "[" / "]" / "?" / "="
+        //               ; Must be in quoted-string,
+        //               ; to use within parameter values
+        //
+        //
+        // See also comments in test_from_raw_unnecessary_percent_decode.
         lazy_static! {
-            static ref RE: Regex = Regex::new("[\x01-\x08\x10\x1F\x7F\"\\\\]").unwrap();
+            static ref RE: Regex = Regex::new("[\x00-\x08\x10-\x1F\x7F\"\\\\]").unwrap();
         }
         match self {
             DispositionParam::Name(ref value) => write!(f, "name={}", value),
@@ -494,7 +546,7 @@ impl fmt::Display for DispositionParam {
 }
 
 impl fmt::Display for ContentDisposition {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.disposition)?;
         self.parameters
             .iter()
@@ -615,7 +667,7 @@ mod tests {
     fn test_from_raw_unordered() {
         let a = HeaderValue::from_static(
             "form-data; dummy=3; filename=\"sample.png\" ; name=upload;",
-            // Actually, a trailling semolocon is not compliant. But it is fine to accept.
+            // Actually, a trailing semicolon is not compliant. But it is fine to accept.
         );
         let a: ContentDisposition = ContentDisposition::from_raw(&a).unwrap();
         let b = ContentDisposition {
@@ -707,9 +759,8 @@ mod tests {
         Mainstream browsers like Firefox (gecko) and Chrome use UTF-8 directly as above.
         (And now, only UTF-8 is handled by this implementation.)
         */
-        let a =
-            HeaderValue::from_str("form-data; name=upload; filename=\"文件.webp\"")
-                .unwrap();
+        let a = HeaderValue::from_str("form-data; name=upload; filename=\"文件.webp\"")
+            .unwrap();
         let a: ContentDisposition = ContentDisposition::from_raw(&a).unwrap();
         let b = ContentDisposition {
             disposition: DispositionType::FormData,
@@ -773,9 +824,19 @@ mod tests {
     }
 
     #[test]
-    fn test_from_raw_uncessary_percent_decode() {
+    fn test_from_raw_unnecessary_percent_decode() {
+        // In fact, RFC7578 (multipart/form-data) Section 2 and 4.2 suggests that filename with
+        // non-ASCII characters MAY be percent-encoded.
+        // On the contrary, RFC6266 or other RFCs related to Content-Disposition response header
+        // do not mention such percent-encoding.
+        // So, it appears to be undecidable whether to percent-decode or not without
+        // knowing the usage scenario (multipart/form-data v.s. HTTP response header) and
+        // inevitable to unnecessarily percent-decode filename with %XX in the former scenario.
+        // Fortunately, it seems that almost all mainstream browsers just send UTF-8 encoded file
+        // names in quoted-string format (tested on Edge, IE11, Chrome and Firefox) without
+        // percent-encoding. So we do not bother to attempt to percent-decode.
         let a = HeaderValue::from_static(
-            "form-data; name=photo; filename=\"%74%65%73%74%2e%70%6e%67\"", // Should not be decoded!
+            "form-data; name=photo; filename=\"%74%65%73%74%2e%70%6e%67\"",
         );
         let a: ContentDisposition = ContentDisposition::from_raw(&a).unwrap();
         let b = ContentDisposition {
@@ -811,6 +872,13 @@ mod tests {
 
         let a = HeaderValue::from_static("inline; filename=  ");
         assert!(ContentDisposition::from_raw(&a).is_err());
+
+        let a = HeaderValue::from_static("inline; filename=\"\"");
+        assert!(ContentDisposition::from_raw(&a)
+            .expect("parse cd")
+            .get_filename()
+            .expect("filename")
+            .is_empty());
     }
 
     #[test]

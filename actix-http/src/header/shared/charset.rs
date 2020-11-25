@@ -7,9 +7,7 @@ use self::Charset::*;
 ///
 /// The string representation is normalized to upper case.
 ///
-/// See [http://www.iana.org/assignments/character-sets/character-sets.xhtml][url].
-///
-/// [url]: http://www.iana.org/assignments/character-sets/character-sets.xhtml
+/// See <http://www.iana.org/assignments/character-sets/character-sets.xhtml>.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum Charset {
@@ -98,7 +96,7 @@ impl Charset {
 }
 
 impl Display for Charset {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.label())
     }
 }
@@ -137,17 +135,22 @@ impl FromStr for Charset {
     }
 }
 
-#[test]
-fn test_parse() {
-    assert_eq!(Us_Ascii, "us-ascii".parse().unwrap());
-    assert_eq!(Us_Ascii, "US-Ascii".parse().unwrap());
-    assert_eq!(Us_Ascii, "US-ASCII".parse().unwrap());
-    assert_eq!(Shift_Jis, "Shift-JIS".parse().unwrap());
-    assert_eq!(Ext("ABCD".to_owned()), "abcd".parse().unwrap());
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_display() {
-    assert_eq!("US-ASCII", format!("{}", Us_Ascii));
-    assert_eq!("ABCD", format!("{}", Ext("ABCD".to_owned())));
+    #[test]
+    fn test_parse() {
+        assert_eq!(Us_Ascii, "us-ascii".parse().unwrap());
+        assert_eq!(Us_Ascii, "US-Ascii".parse().unwrap());
+        assert_eq!(Us_Ascii, "US-ASCII".parse().unwrap());
+        assert_eq!(Shift_Jis, "Shift-JIS".parse().unwrap());
+        assert_eq!(Ext("ABCD".to_owned()), "abcd".parse().unwrap());
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!("US-ASCII", format!("{}", Us_Ascii));
+        assert_eq!("ABCD", format!("{}", Ext("ABCD".to_owned())));
+    }
 }

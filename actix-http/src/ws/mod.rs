@@ -13,15 +13,15 @@ use crate::message::RequestHead;
 use crate::response::{Response, ResponseBuilder};
 
 mod codec;
+mod dispatcher;
 mod frame;
 mod mask;
 mod proto;
-mod transport;
 
-pub use self::codec::{Codec, Frame, Message};
+pub use self::codec::{Codec, Frame, Item, Message};
+pub use self::dispatcher::Dispatcher;
 pub use self::frame::Parser;
 pub use self::proto::{hash_key, CloseCode, CloseReason, OpCode};
-pub use self::transport::Transport;
 
 /// Websocket protocol errors
 #[derive(Debug, Display, From)]
@@ -44,16 +44,21 @@ pub enum ProtocolError {
     /// A payload reached size limit.
     #[display(fmt = "A payload reached size limit.")]
     Overflow,
-    /// Continuation is not supported
-    #[display(fmt = "Continuation is not supported.")]
-    NoContinuation,
-    /// Bad utf-8 encoding
-    #[display(fmt = "Bad utf-8 encoding.")]
-    BadEncoding,
+    /// Continuation is not started
+    #[display(fmt = "Continuation is not started.")]
+    ContinuationNotStarted,
+    /// Received new continuation but it is already started
+    #[display(fmt = "Received new continuation but it is already started")]
+    ContinuationStarted,
+    /// Unknown continuation fragment
+    #[display(fmt = "Unknown continuation fragment.")]
+    ContinuationFragment(OpCode),
     /// Io error
     #[display(fmt = "io error: {}", _0)]
     Io(io::Error),
 }
+
+impl std::error::Error for ProtocolError {}
 
 impl ResponseError for ProtocolError {}
 
@@ -105,7 +110,7 @@ impl ResponseError for HandshakeError {
     }
 }
 
-/// Verify `WebSocket` handshake request and create handshake reponse.
+/// Verify `WebSocket` handshake request and create handshake response.
 // /// `protocols` is a sequence of known protocols. On successful handshake,
 // /// the returned response headers contain the first protocol in this list
 // /// which the server also knows.
@@ -165,7 +170,7 @@ pub fn verify_handshake(req: &RequestHead) -> Result<(), HandshakeError> {
     Ok(())
 }
 
-/// Create websocket's handshake response
+/// Create websocket handshake response
 ///
 /// This function returns handshake `Response`, ready to send to peer.
 pub fn handshake_response(req: &RequestHead) -> ResponseBuilder {

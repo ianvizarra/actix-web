@@ -9,11 +9,13 @@
 
 pub use self::accept_charset::AcceptCharset;
 //pub use self::accept_encoding::AcceptEncoding;
-pub use self::accept_language::AcceptLanguage;
 pub use self::accept::Accept;
+pub use self::accept_language::AcceptLanguage;
 pub use self::allow::Allow;
 pub use self::cache_control::{CacheControl, CacheDirective};
-pub use self::content_disposition::{ContentDisposition, DispositionType, DispositionParam};
+pub use self::content_disposition::{
+    ContentDisposition, DispositionParam, DispositionType,
+};
 pub use self::content_language::ContentLanguage;
 pub use self::content_range::{ContentRange, ContentRangeSpec};
 pub use self::content_type::ContentType;
@@ -47,7 +49,7 @@ macro_rules! __hyper__deref {
                 &mut self.0
             }
         }
-    }
+    };
 }
 
 #[doc(hidden)]
@@ -74,8 +76,8 @@ macro_rules! test_header {
     ($id:ident, $raw:expr) => {
         #[test]
         fn $id() {
-            use $crate::test;
             use super::*;
+            use $crate::test;
 
             let raw = $raw;
             let a: Vec<Vec<u8>> = raw.iter().map(|x| x.to_vec()).collect();
@@ -118,7 +120,7 @@ macro_rules! test_header {
             // Test formatting
             if typed.is_some() {
                 let raw = &($raw)[..];
-                let mut iter = raw.iter().map(|b|str::from_utf8(&b[..]).unwrap());
+                let mut iter = raw.iter().map(|b| str::from_utf8(&b[..]).unwrap());
                 let mut joined = String::new();
                 joined.push_str(iter.next().unwrap());
                 for s in iter {
@@ -128,7 +130,7 @@ macro_rules! test_header {
                 assert_eq!(format!("{}", typed.unwrap()), joined);
             }
         }
-    }
+    };
 }
 
 #[macro_export]
@@ -159,18 +161,18 @@ macro_rules! header {
         }
         impl std::fmt::Display for $id {
             #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> ::std::fmt::Result {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 $crate::http::header::fmt_comma_delimited(f, &self.0[..])
             }
         }
         impl $crate::http::header::IntoHeaderValue for $id {
-            type Error = $crate::http::header::InvalidHeaderValueBytes;
+            type Error = $crate::http::header::InvalidHeaderValue;
 
             fn try_into(self) -> Result<$crate::http::header::HeaderValue, Self::Error> {
                 use std::fmt::Write;
                 let mut writer = $crate::http::header::Writer::new();
                 let _ = write!(&mut writer, "{}", self);
-                $crate::http::header::HeaderValue::from_shared(writer.take())
+                $crate::http::header::HeaderValue::from_maybe_shared(writer.take())
             }
         }
     };
@@ -195,18 +197,18 @@ macro_rules! header {
         }
         impl std::fmt::Display for $id {
             #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 $crate::http::header::fmt_comma_delimited(f, &self.0[..])
             }
         }
         impl $crate::http::header::IntoHeaderValue for $id {
-            type Error = $crate::http::header::InvalidHeaderValueBytes;
+            type Error = $crate::http::header::InvalidHeaderValue;
 
             fn try_into(self) -> Result<$crate::http::header::HeaderValue, Self::Error> {
                 use std::fmt::Write;
                 let mut writer = $crate::http::header::Writer::new();
                 let _ = write!(&mut writer, "{}", self);
-                $crate::http::header::HeaderValue::from_shared(writer.take())
+                $crate::http::header::HeaderValue::from_maybe_shared(writer.take())
             }
         }
     };
@@ -231,12 +233,12 @@ macro_rules! header {
         }
         impl std::fmt::Display for $id {
             #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 std::fmt::Display::fmt(&self.0, f)
             }
         }
         impl $crate::http::header::IntoHeaderValue for $id {
-            type Error = $crate::http::header::InvalidHeaderValueBytes;
+            type Error = $crate::http::header::InvalidHeaderValue;
 
             fn try_into(self) -> Result<$crate::http::header::HeaderValue, Self::Error> {
                 self.0.try_into()
@@ -276,7 +278,7 @@ macro_rules! header {
         }
         impl std::fmt::Display for $id {
             #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match *self {
                     $id::Any => f.write_str("*"),
                     $id::Items(ref fields) => $crate::http::header::fmt_comma_delimited(
@@ -285,13 +287,13 @@ macro_rules! header {
             }
         }
         impl $crate::http::header::IntoHeaderValue for $id {
-            type Error = $crate::http::header::InvalidHeaderValueBytes;
+            type Error = $crate::http::header::InvalidHeaderValue;
 
             fn try_into(self) -> Result<$crate::http::header::HeaderValue, Self::Error> {
                 use std::fmt::Write;
                 let mut writer = $crate::http::header::Writer::new();
                 let _ = write!(&mut writer, "{}", self);
-                $crate::http::header::HeaderValue::from_shared(writer.take())
+                $crate::http::header::HeaderValue::from_maybe_shared(writer.take())
             }
         }
     };
@@ -330,11 +332,10 @@ macro_rules! header {
     };
 }
 
-
 mod accept_charset;
 //mod accept_encoding;
-mod accept_language;
 mod accept;
+mod accept_language;
 mod allow;
 mod cache_control;
 mod content_disposition;
